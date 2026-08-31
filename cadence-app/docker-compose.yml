@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: cadence
+      POSTGRES_PASSWORD: cadence
+      POSTGRES_DB: cadence
+    ports:
+      - "5432:5432"
+    volumes:
+      - cadence_pgdata:/var/lib/postgresql/data
+
+volumes:
+  cadence_pgdata:

@@ -1,0 +1,97 @@
+import Link from 'next/link';
+import { auth } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
+import { portalFetch } from '@/lib/engine/access';
+import { fmtDate, money } from '@/lib/format';
+import { Card, PageHead, StateBadge, Uid } from '@/components/ui';
+import { payInvoiceAction } from '../../actions';
+
+export default async function PortalInvoiceDetailPage({ params }: { params: Promise<{ publicId: string }> }) {
+  const { publicId } = await params;
+  const session = await auth();
+  const studentId = session!.user.id;
+
+  const result = await prisma.$transaction((tx) => portalFetch(tx, 'invoice', publicId, studentId));
+
+  if (!result.ok) {
+    return (
+      <>
+        <PageHead title="Invoice" />
+        <div className="refusal">
+          <b>{result.error}</b>
+        </div>
+        <Link className="btn primary" href="/portal/invoices">
+          Back to invoices
+        </Link>
+      </>
+    );
+  }
+
+  const invoice = await prisma.invoice.findUniqueOrThrow({
+    where: { id: result.value.id },
+    include: { lines: true, receipts: true },
+  });
+
+  return (
+    <>
+      <PageHead
+        title={`Invoice ${invoice.publicId}`}
+        lede={`Issued ${fmtDate(invoice.issuedAt)} · due ${fmtDate(invoice.dueAt)}`}
+        actions={
+          <>
+            {invoice.status === 'ISSUED' && (
+              <form action={payInvoiceAction}>
+                <input type="hidden" name="id" value={invoice.id} />
+                <button className="btn brass" type="submit">
+                  Pay with Stripe
+                </button>
+              </form>
+            )}
+            <Link className="btn" href="/portal/invoices">
+              Back
+            </Link>
+          </>
+        }
+      />
+
+      <Card title="Lines" tight>
+        <table>
+          <thead>
+            <tr>
+              <th>Lesson</th>
+              <th>Date</th>
+              <th>State at issue</th>
+              <th className="num">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {invoice.lines.map((ln) => (
+              <tr key={ln.id}>
+                <td>{ln.lessonPublicId ? <Uid id={ln.lessonPublicId} /> : <span className="tiny">{ln.periodLabel}</span>}</td>
+                <td className="tiny mono">{ln.date ? fmtDate(ln.date) : '—'}</td>
+                <td>{ln.stateAtIssue ? <StateBadge state={ln.stateAtIssue} /> : <span className="badge b-neutral">Period</span>}</td>
+                <td className="num">{money(ln.total)}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colSpan={3} style={{ textAlign: 'right', fontWeight: 600, padding: '10px 16px' }}>
+                Total
+              </td>
+              <td className="num" style={{ fontWeight: 600, padding: '10px 16px' }}>
+                {money(invoice.total)}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </Card>
+
+      {invoice.receipts[0] && (
+        <Card title="Receipt">
+          <Uid id={invoice.receipts[0].publicId} />
+        </Card>
+      )}
+    </>
+  );
+}

@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cadence — requirement traceability</title>
+<link rel="stylesheet" href="assets/styles.css">
+<style>
+  body { padding: 34px 26px 80px; }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  .doc-head { border-bottom: 1px solid var(--hair); padding-bottom: 18px; margin-bottom: 22px; }
+  .doc-head .word { font-family: var(--serif); font-size: 30px; }
+  td.rq { white-space: nowrap; font-family: var(--mono); font-size: 11.5px; color: var(--brass); }
+  td.wf { font-family: var(--mono); font-size: 11px; color: var(--graphite); }
+  h2 { margin: 30px 0 10px; }
+  .k { display:inline-block; font-size:10.5px; letter-spacing:.05em; padding:1px 6px; border-radius:2px; }
+  .k-full { background: var(--paid-tint); color: var(--paid); }
+  .k-part { background: var(--brass-tint); color: #7C5A1E; }
+  .k-ui   { background: var(--info-tint); color: #2C4670; }
+  ol li, ul li { margin-bottom: 7px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="doc-head">
+  <div class="word">Cadence — requirement traceability</div>
+  <p class="muted">Music Lesson Studio Billing · base prompt + iterations 1–10 · prototype build<br>
+  <a href="index.html">← open the prototype</a></p>
+</div>
+
+<p>Every requirement in the reviewed specification is listed below with the place in the prototype
+where its rule lives and the screen where you can see it behave. Rules marked
+<span class="k k-full">executable</span> run as real code and can be tested by driving the interface.
+Rules marked <span class="k k-ui">surfaced</span> are rendered but not enforced by logic.
+Rules marked <span class="k k-part">assumed</span> required a decision the specification does not make —
+each one is listed again under <em>Open questions</em> below.</p>
+
+<h2>Base prompt</h2>
+<table>
+<thead><tr><th>Req</th><th>Rule lives in</th><th>See it on</th><th>Depth</th></tr></thead>
+<tbody>
+<tr><td class="rq">BASE-R01</td><td class="wf">engine.js · consumeInvitation / sendInvite</td><td>Portal access · sign-in gate</td><td><span class="k k-full">executable</span></td></tr>
+<tr><td class="rq">BASE-R02</td><td class="wf">— umbrella statement</td><td>whole app</td><td><span class="k k-part">assumed</span></td></tr>
+<tr><td class="rq">BASE-R03</td><td class="wf">engine.js · portalFetch, ui.js · pOverview/pLessons/pInvoices</td><td>Student portal</td><td><span class="k k-full">executable</span></td></tr>
+<tr><td class="rq">BASE-R04</td><td class="wf">— duplicate of BASE-R02</td><td>—</td><td><span class="k k-part">assumed</span></td></tr>
+<tr><td class="rq">BASE-R05</td><td class="wf">— duplicate of BASE-R02</td><td>—</td><td><span class="k k-part">assumed</span></td></tr>
+<tr><td class="rq">BASE-R06</td><td class="wf">data.js · materializeSeries; engine.js · reviseSeries, transition</td><td>Calendar · Series detail</td><td><span class="k k-full">executable</span></td></tr>
+<tr><td class="rq">BASE-R07</td><td class="wf">— duplicate of BASE-R02</td><td>—</td><td><span class="k k-part">assumed</span></td></tr>
+<tr><td class="rq">BASE-R08</td><td class="wf">engine.js · notify (unsubscribe applies to reminders only)</td><td>Email activity · Preferences</td><td><span class="k k-full">executable</span></td></tr>
+</tbody>
+</table>
+
+<h2>Iteration 1 — immutable identifiers</h2>
+<table>
+<thead><tr><th>Req</th><th>Rule lives in</th><th>See it on</th><th>Depth</th></tr></thead>
+<tbody>
+<tr><td class="rq">I01-R01</td><td class="wf">data.js · nextId, PREFIXES</td><td>Every list and detail surface; Settings → sequences</td><td><span class="k k-full">executable</span></td></tr>
+<tr><td class="rq">I01-R02</td><td class="wf">data.js · runIdentifierMigration (ascending creation order, tie broken by ordering key)</td><td>Students, Calendar, Invoices — seeded records are contiguous from 000001</td><td><span class="k k-full">executable</span></td></tr>
+<tr><td class="rq">I01-R03</td><td class="wf">ui.js · uid() renders read-only; no edit control exists anywhere</td><td>All surfaces; hover any identifier</td><td><span class="k k-full">executable</span></td></tr>
+</tbody>
+</table>
+
+<h2>Iteration 2 — lesson lifecycle states</h2>
+<table>
+<thead><tr><th>Req</th><th>Rule lives in</th><th>See it on</th><th>Depth</th></tr></thead>
+<tbody>
+<tr><td class="rq">I02-R01</td><td class="wf">data.js · LESSON_STATES, ALLOWED_FROM_SCHEDULED; engine.js · allowedTransitions, transition</td><td>Calendar → click a lesson</td><td><span class="k k-full">executable</span></td></tr>
+<tr><td class="rq">I02-R02</td><td class="wf">data.js · seed (historical states applied before migration)</td><td>Series detail → Occurrences</td><td><span class="k k-full">executable</span></td></tr>
+<tr><td class="rq">I02-R03</td><td class="wf">engine.js · transition → logActivity</td><td>Calendar, Student detail → Activity, portal My lessons</td><td><span class="k k-full">executable</span></td></tr>
+</tbody>
+</table>
+
+<h2>Iteration 3 — series revision history and boundaries</h2>
+<table>
+<thead><tr><th>Req</th><th>Rule lives in</th><th>See it on</th><th>Depth</th></tr></thead>
+<tbody>
+<tr><td class="rq">I03-R01</td><td class="wf">data.js · materializeSeries (12-week horizon); ui.js · series → Boundary card</td><td>Series detail</td><td><span class="k k-full">executable</span></td></tr>
+<tr><td class="rq">I03-R02</td><td class="wf">engine.js · reviseSeries (future + Scheduled only; identifiers retained)</td><td>Series detail → Revise series</td><td><span class="k k-full">executable</span></td></tr>
+<tr><td class="rq">I03-R03</td><td class="wf">engine.js · reviseSeries → s.revisions (never edited, ascending)</td><td>Series detail → Revision history</td><td><span class="k k-full">executable</span></td></tr>
+</tbody>
+</table>
+
+<h2>Iteration 4 — duplicate invoice after series regeneration</h2>
+<table>
+<thead><tr><th>Req</th><th>Rule lives in</th><th>See it on</th><th>Depth</th></tr></thead>
+<tbody>
+<tr><td class="rq">I04-R01</td><td class="wf">engine.js · unbilledEntries (excludes any entry on a non-void invoice)</td><td>Unbilled lessons</td><td><span class="k k-full">executable</span></td></tr>
+<tr><td class="rq">I04-R02</td><td class="wf">engine.js · createInvoice (refuses when no eligible entry remains)</td><td>Invoices → Create invoice, run twice</td><td><span class="k k-full">executable</span></td></tr>
+<tr><td class="rq">I04-R03</td><td class="wf">invoice.status = 'void' + flaggedForReview; identifier retained</td><td>Invoice detail (void banner / review banner)</td><td><span class="k k-part">assumed</span></td></tr>
+<tr><td class="rq">I04-R04</td><td class="wf">no delete path exists in engine.js</td><td>Invoice detail after a reversion</td><td><span class="k k-full">executable</span></td></tr>
+</tbody>
+</table>
+
+<h2>Iteration 5 — email delivery event history</h2>
+<table>
+<thead><tr><th>Req</th><th>Rule lives in</th><th>See it on</th><th>Depth</th></tr></thead>
+<tbody>
+<tr><td class="rq">I05-R01</td><td class="wf">data.js · pushEvent; current state = last event</td><td>Email activity → open any record</td><td><span class="k k-full">executable</span></td></tr>
+<tr><td class="rq">I05-R02</td><td class="wf">data.js · mkNotification for pre-existing mail, then backfilled by the migration</td><td>Email activity (seeded rows)</td><td><span class="k k-full">executable</span></td></tr>
+<tr><td class="rq">I05-R03</td><td class="wf">engine.js · resend creates a new record; portal has no email surface</td><td>Notification detail → Resend</td><td><span class="k k-full">executable</span></td></tr>
+</tbody>
+</table>
+
+<h2>Iteration 6 — invoice lines with captured rate and policy</h2>
+<table>
+<thead><tr><th>Req</th><th>Rule lives in</th><th>See it on</th><th>Depth</th></tr></thead>
+<tbody>
+<tr><td class="rq">I06-R01</td><td class="wf">engine.js · createInvoice (line per billable lesson; total = sum of lines)</td><td>Invoice detail → Lines</td><td><span class="k k-full">executable</span></td></tr>
+<tr><td class="rq">I06-R02</td><td class="wf">data.js · issueLegacyInvoice + runIdentifierMigration</td><td>INV-000001 / INV-000002 (seeded, marked <em>not historically verified</em>)</td><td><span class="k k-part">assumed</span></td></tr>
+<tr><td class="rq">I06-R03</td><td class="wf">lines store rate + policyNote at issue; Settings edits never write back</td><td>Settings → change the rate or note, then reopen an old invoice</td><td><span class="k k-full">executable</span></td></tr>
+</tbody>
+</table>
+
+<h2>Iteration 7 — late-cancel charged twice</h2>
+<table>
+<thead><tr><th>Req</th><th>Rule lives in</th><th>See it on</th><th>Depth</th></tr></thead>
+<tbody>
+<tr><td class="rq">I07-R01</td><td class="wf">engine.js · syncBillingEntry — the entry is keyed by lessonId, so it cannot be created twice</td><td>Unbilled lessons after a late cancellation</td><td><span class="k k-full">executable</span></td></tr>
+<tr><td class="rq">I07-R02</td><td class="wf">engine.js · billableAmount returns null outside the window</td><td>Portal → My lessons → cancel a distant lesson</td><td><span class="k k-full">executable</span></td></tr>
+<tr><td class="rq">I07-R03</td><td class="wf">entries carry voided + voidReason; nothing is removed</td><td>Lesson dialog → Billing line</td><td><span class="k k-full">executable</span></td></tr>
+<tr><td class="rq">I07-R04</td><td class="wf">engine.js · balance ignores voided entries; teacher sees them in the lesson dialog</td><td>Student detail vs portal Overview</td><td><span class="k k-full">executable</span></td></tr>
+</tbody>
+</table>
+
+<h2>Iteration 8 — revert an incorrect action</h2>
+<table>
+<thead><tr><th>Req</th><th>Rule lives in</th><th>See it on</th><th>Depth</th></tr></thead>
+<tbody>
+<tr><td class="rq">I08-R01</td><td class="wf">engine.js · revert + reversionBlockReason (paid invoice blocks, with the reason stated)</td><td>Lesson dialog on a terminal lesson</td><td><span class="k k-full">executable</span></td></tr>
+<tr><td class="rq">I08-R02</td><td class="wf">engine.js · revert — invoice moves to void, lines and captured rates kept, co-billed lessons return to Unbilled</td><td>Invoice detail after reverting a covered lesson</td><td><span class="k k-full">executable</span></td></tr>
+<tr><td class="rq">I08-R03</td><td class="wf">engine.js · revert → logActivity (previous state, new state, actor, timestamp, lesson id)</td><td>Student detail → Activity</td><td><span class="k k-full">executable</span></td></tr>
+<tr><td class="rq">I08-R04</td><td class="wf">engine.js · syncBillingEntry creates a fresh entry on re-terminalisation; the withdrawn one is never reinstated</td><td>Revert, then mark Completed again — Unbilled shows the lesson once</td><td><span class="k k-full">executable</span></td></tr>
+</tbody>
+</table>
+
+<h2>Iteration 9 — PDF history and teacher notes</h2>
+<table>
+<thead><tr><th>Req</th><th>Rule lives in</th><th>See it on</th><th>Depth</th></tr></thead>
+<tbody>
+<tr><td class="rq">I09-R01</td><td class="wf">engine.js · snapshot (bounded to 5; snapshotSeq keeps ascending after a discard)</td><td>Invoice detail → Regenerate PDF, six times</td><td><span class="k k-full">executable</span></td></tr>
+<tr><td class="rq">I09-R02</td><td class="wf">engine.js · addNote / editNote / deleteNote — NTE identifiers, deletion never releases the number</td><td>Student, lesson and invoice → Add note</td><td><span class="k k-full">executable</span></td></tr>
+<tr><td class="rq">I09-R03</td><td class="wf">engine.js · notesFor filters by role and visibility</td><td>Compare Student detail with portal Overview</td><td><span class="k k-full">executable</span></td></tr>
+</tbody>
+</table>
+
+<h2>Iteration 10 — portal-link access leakage</h2>
+<table>
+<thead><tr><th>Req</th><th>Rule lives in</th><th>See it on</th><th>Depth</th></tr></thead>
+<tbody>
+<tr><td class="rq">I10-R01</td><td class="wf">engine.js · consumeInvitation (single use; reuse is refused generically)</td><td>Portal access → Open link twice</td><td><span class="k k-full">executable</span></td></tr>
+<tr><td class="rq">I10-R02</td><td class="wf">engine.js · portalFetch (every read scoped to the authenticated student)</td><td>Portal → Invoices → Try a direct link</td><td><span class="k k-full">executable</span></td></tr>
+<tr><td class="rq">I10-R03</td><td class="wf">portalFetch is read-only; no mutation path exists from the portal except paying one's own invoice</td><td>Portal access → Access attempts log</td><td><span class="k k-full">executable</span></td></tr>
+<tr><td class="rq">I10-R04</td><td class="wf">engine.js · REFUSAL — one constant used for "does not exist" and "not yours"</td><td>Probe INV-999999 and a real invoice you do not own — identical answer</td><td><span class="k k-full">executable</span></td></tr>
+</tbody>
+</table>
+
+<h2>Open questions raised by the build</h2>
+<p class="muted">These are points where the prototype had to choose because the specification does not.
+Each one is a candidate for a clarification request before implementation.</p>
+<ol>
+<li><strong>Four requirement IDs, one sentence.</strong> BASE-R02, R04, R05 and R07 quote the same
+overview sentence verbatim. As distinct requirements they are not separable and cannot be
+independently tested — a workflow that passes one passes all four for the same reason.</li>
+
+<li><strong>Duplicate numbering in Iteration 10.</strong> I10-R01 through I10-R04 each appear twice
+with different text. The second set reads as a restatement, but nothing declares which is
+normative, so an implementer choosing one is guessing.</li>
+
+<li><strong>Iteration 2 is amended twice and never restated.</strong> I07 makes late cancellations
+billable, reversing "cancellations are not billable"; I08 makes terminal states reversible,
+reversing "no further transition is permitted". Anyone reading I02 in isolation implements the
+wrong system. The prototype implements the amended rules and marks I02 accordingly.</li>
+
+<li><strong>Iteration 6 migration fabricates rates it calls historical.</strong> Dividing an existing
+invoice total by its lesson count preserves the total but invents a per-line rate that was never in
+force — most visibly for an invoice mixing a full-rate lesson with a 50% late-cancel charge. The
+prototype flags every migrated line <em>not historically verified</em>; the specification does not say
+whether that is acceptable.</li>
+
+<li><strong>Late-cancel boundary.</strong> "At or after the window boundary is a late cancellation"
+reads as inclusive, so the prototype treats exactly 24 hours before start as late. If the intent is
+exclusive, one test case flips.</li>
+
+<li><strong>Reversion of a co-billed lesson.</strong> I08 says the covering unpaid invoice is voided
+in full and co-billed lessons return to Unbilled. It does not say whether the student is notified
+that an invoice they were sent no longer stands. The prototype does not email; that is a decision,
+not a reading.</li>
+
+<li><strong>Iteration 5 has no readable prompt.</strong> Its narrative is struck through in the
+reviewed document; only I05-R01 through R03 survive. The delivery event vocabulary used here
+(queued → sent → delivered → opened / failed) is inferred from the requirement text and from
+downstream "preserved behaviour" clauses, not stated anywhere.</li>
+
+<li><strong>Monthly billing and lesson state.</strong> I06 gives monthly invoices a single period line
+with no lesson identifiers. Nothing says what happens to a completed lesson belonging to a monthly
+student — whether it stays in Unbilled Lessons forever or is consumed by the period. The prototype
+keeps monthly students' lessons out of per-lesson invoicing but does not clear them.</li>
+</ol>
+
+<h2>What is real and what is not</h2>
+<ul>
+<li><strong>Real:</strong> identifier assignment and backfill, lifecycle transitions and their
+guards, late-cancel arithmetic, billing eligibility, invoice line composition and totals, voiding,
+reversion, snapshot bounding, note visibility, portal scoping and invitation single-use. All of it
+runs in <code>js/engine.js</code> and can be exercised through the interface.</li>
+<li><strong>Not real:</strong> there is no server, no database and no Stripe. "Pay with Stripe"
+settles the invoice immediately. Email is recorded as a notification record rather than sent — the
+Email activity screen is the outbox. State lives in memory: reloading the page reseeds the studio.</li>
+</ul>
+
+</div>
+</body>
+</html>

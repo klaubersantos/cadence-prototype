@@ -1,0 +1,373 @@
+// Cadence — Prisma schema
+// Ported from the cadence-prototype in-memory model (js/data.js, js/engine.js).
+// See /cadence-prototype/traceability.html for the requirement anchors (BASE-Rxx, IxxRxx)
+// each shape below is satisfying.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------- identifier sequences (I01-R01) ----------
+// nextId(prefix) increments this row inside a transaction. Never reused,
+// never decremented, including for voided/deleted records.
+model Sequence {
+  prefix  String @id
+  counter Int    @default(0)
+}
+
+// ---------- studio + accounts ----------
+model Studio {
+  id                    String @id @default(cuid())
+  name                  String
+  teacherName           String
+  teacherEmail          String
+  timezone              String
+  defaultDuration       Int
+  defaultLocation       String
+  lateCancelWindowHours Int
+  lateCancelChargePct   Int
+  policyNote            String
+
+  teachers Teacher[]
+  students Student[]
+
+  createdAt DateTime @default(now())
+}
+
+model Teacher {
+  id           String @id @default(cuid())
+  studioId     String
+  studio       Studio @relation(fields: [studioId], references: [id])
+  email        String @unique
+  passwordHash String
+  name         String
+
+  createdAt DateTime @default(now())
+}
+
+enum BillingMode {
+  PER_LESSON
+  MONTHLY
+}
+
+enum PortalStatus {
+  NONE
+  INVITED
+  ACTIVE
+}
+
+model Student {
+  id            String       @id @default(cuid())
+  publicId      String       @unique
+  studioId      String
+  studio        Studio       @relation(fields: [studioId], references: [id])
+  name          String
+  email         String       @unique
+  passwordHash  String?
+  rate          Int // cents
+  billingMode   BillingMode  @default(PER_LESSON)
+  monthlyAmount Int          @default(0) // cents
+  reminderHours Int          @default(24)
+  unsubscribed  Boolean      @default(false)
+  portalStatus  PortalStatus @default(NONE)
+
+  invitations Invitation[]
+  series      Series[]
+  lessons     Lesson[]
+  invoices    Invoice[]
+
+  createdAt DateTime @default(now())
+}
+
+model Invitation {
+  id         String    @id @default(cuid())
+  token      String    @unique
+  studentId  String
+  student    Student   @relation(fields: [studentId], references: [id])
+  consumed   Boolean   @default(false)
+  sentAt     DateTime  @default(now())
+  consumedAt DateTime?
+}
+
+// ---------- recurring series (BASE-R06, I03) ----------
+enum BoundaryType {
+  ONGOING
+  END_DATE
+}
+
+model Series {
+  id               String       @id @default(cuid())
+  studentId        String
+  student          Student      @relation(fields: [studentId], references: [id])
+  dayOfWeek        Int // 0=Sunday..6=Saturday
+  time             String // "HH:MM"
+  durationMin      Int
+  startDate        DateTime
+  boundaryType     BoundaryType @default(ONGOING)
+  endDate          DateTime?
+  horizonWeeks     Int          @default(12)
+  lastMaterialized DateTime?
+
+  lessons   Lesson[]
+  revisions SeriesRevision[]
+
+  createdAt DateTime @default(now())
+}
+
+// I03-R03: immutable, ascending, never edited
+model SeriesRevision {
+  id       String   @id @default(cuid())
+  seriesId String
+  series   Series   @relation(fields: [seriesId], references: [id])
+  seq      Int
+  at       DateTime @default(now())
+  actor    String
+  fields   Json // [{ field, from, to }]
+  affected Int
+  added    Int
+  removed  Int
+}
+
+// ---------- lessons (I02) ----------
+enum LessonState {
+  SCHEDULED
+  COMPLETED
+  NO_SHOW
+  CANCELLED_STUDENT
+  CANCELLED_TEACHER
+}
+
+model Lesson {
+  id           String       @id @default(cuid())
+  publicId     String       @unique
+  studentId    String
+  student      Student      @relation(fields: [studentId], references: [id])
+  seriesId     String?
+  series       Series?      @relation(fields: [seriesId], references: [id])
+  start        DateTime
+  durationMin  Int
+  state        LessonState  @default(SCHEDULED)
+  cancelledAt  DateTime?
+  lateCancel   Boolean      @default(false)
+  stateSetAt   DateTime?
+  location     String
+  revertedFrom LessonState?
+
+  billingEntries BillingEntry[]
+  notifications  Notification[]
+
+  createdAt DateTime @default(now())
+}
+
+// ---------- billing entries (I07/I08) — the single source of "what is owed" ----------
+// A lesson may accumulate several rows over time (withdrawn ones are kept for
+// the audit trail), but at most one is ever "live" (voided = false) at once.
+enum BillingKind {
+  LESSON
+  LATE_CANCEL
+}
+
+model BillingEntry {
+  id         String      @id @default(cuid())
+  lessonId   String
+  lesson     Lesson      @relation(fields: [lessonId], references: [id])
+  kind       BillingKind
+  amount     Int // cents
+  voided     Boolean     @default(false)
+  voidReason String?
+  invoiceId  String?
+  invoice    Invoice?    @relation(fields: [invoiceId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+// ---------- invoicing (I04, I06) ----------
+enum InvoiceType {
+  PER_LESSON
+  MONTHLY
+}
+
+enum InvoiceStatus {
+  ISSUED
+  PAID
+  VOID
+}
+
+model Invoice {
+  id               String        @id @default(cuid())
+  publicId         String        @unique
+  studentId        String
+  student          Student       @relation(fields: [studentId], references: [id])
+  type             InvoiceType
+  status           InvoiceStatus @default(ISSUED)
+  issuedAt         DateTime      @default(now())
+  dueAt            DateTime
+  total            Int           @default(0) // cents; always the sum of its lines
+  flaggedForReview Boolean       @default(false)
+  voidReason       String?
+  snapshotSeq      Int           @default(0)
+
+  lines          InvoiceLine[]
+  snapshots      InvoiceSnapshot[]
+  billingEntries BillingEntry[]
+  payments       Payment[]
+  receipts       Receipt[]
+  notifications  Notification[]
+
+  createdAt DateTime @default(now())
+}
+
+// Each line captures the rate and policy note in force AT ISSUE (I06-R03) —
+// a later settings change must never rewrite a line already issued.
+model InvoiceLine {
+  id             String       @id @default(cuid())
+  invoiceId      String
+  invoice        Invoice      @relation(fields: [invoiceId], references: [id])
+  lessonId       String?
+  lessonPublicId String?
+  date           DateTime?
+  stateAtIssue   LessonState?
+  rate           Int // cents, captured
+  total          Int // cents, captured
+  policyNote     String // captured
+  policyVerified Boolean      @default(true)
+  periodLabel    String?
+  kind           String // "LESSON" | "LATE_CANCEL" | "MONTHLY" — free-form because a
+  // monthly tuition line has no corresponding BillingEntry/BillingKind
+}
+
+// PDF snapshot history (I09-R01) — bounded to 5 most recent by the engine,
+// snapshotSeq on Invoice keeps ascending even past a discard.
+model InvoiceSnapshot {
+  id        String   @id @default(cuid())
+  invoiceId String
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id])
+  seq       Int
+  at        DateTime @default(now())
+  by        String
+  lines     Json
+  total     Int
+}
+
+model Payment {
+  id        String   @id @default(cuid())
+  publicId  String   @unique
+  invoiceId String
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id])
+  amount    Int
+  paidAt    DateTime @default(now())
+  method    String   @default("Simulated checkout")
+
+  receipt Receipt?
+}
+
+model Receipt {
+  id        String   @id @default(cuid())
+  publicId  String   @unique
+  paymentId String   @unique
+  payment   Payment  @relation(fields: [paymentId], references: [id])
+  invoiceId String
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id])
+  issuedAt  DateTime @default(now())
+}
+
+// ---------- notifications (I01, I05) ----------
+enum NotificationType {
+  INVITE
+  REMINDER
+  INVOICE
+  RECEIPT
+  CANCELLATION
+  RESCHEDULE
+  UNPAID_ALERT
+  PAYMENT_FAILED
+}
+
+enum DeliveryState {
+  QUEUED
+  SENT
+  DELIVERED
+  OPENED
+  FAILED
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  publicId  String           @unique
+  type      NotificationType
+  recipient String
+  sentAt    DateTime         @default(now())
+  lessonId  String?
+  lesson    Lesson?          @relation(fields: [lessonId], references: [id])
+  invoiceId String?
+  invoice   Invoice?         @relation(fields: [invoiceId], references: [id])
+  studentId String?
+  receiptId String?
+  subject   String
+
+  events NotificationEvent[]
+}
+
+// Delivery event history — never edited; the current state is the most
+// recent event (I05-R01). Resending creates a whole new Notification (I05-R03).
+model NotificationEvent {
+  id             String        @id @default(cuid())
+  notificationId String
+  notification   Notification  @relation(fields: [notificationId], references: [id])
+  seq            Int
+  state          DeliveryState
+  at             DateTime      @default(now())
+}
+
+// ---------- notes (I09-R02/R03) ----------
+enum NoteTargetType {
+  STUDENT
+  LESSON
+  INVOICE
+}
+
+enum NoteVisibility {
+  PRIVATE
+  SHARED
+}
+
+model Note {
+  id         String         @id @default(cuid())
+  publicId   String         @unique
+  targetType NoteTargetType
+  targetId   String
+  author     String
+  content    String
+  visibility NoteVisibility
+  deleted    Boolean        @default(false)
+  edits      Json           @default("[]")
+
+  createdAt DateTime @default(now())
+}
+
+// ---------- portal access diagnostics (I10) ----------
+model AccessLogEntry {
+  id       String   @id @default(cuid())
+  at       DateTime @default(now())
+  kind     String
+  publicId String
+  by       String?
+  granted  Boolean
+  reason   String
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  at        DateTime @default(now())
+  actor     String
+  text      String
+  lessonId  String?
+  studentId String?
+  invoiceId String?
+  kind      String
+}
