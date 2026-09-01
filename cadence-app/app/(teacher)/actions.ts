@@ -7,7 +7,7 @@ import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { nextId } from '@/lib/engine/identifiers';
 import { transition, revert } from '@/lib/engine/lessons';
-import { createInvoice } from '@/lib/engine/invoices';
+import { createInvoice, snapshot } from '@/lib/engine/invoices';
 import { sendInvite } from '@/lib/engine/access';
 import { materializeSeries, reviseSeries } from '@/lib/engine/series';
 import { addNote } from '@/lib/engine/notes';
@@ -302,4 +302,11 @@ export async function addNoteAction(formData: FormData) {
 
   revalidatePath(parsed.returnTo);
   redirect(parsed.returnTo);
+}
+
+export async function regenerateInvoicePdfAction(formData: FormData) {
+  const session = await requireTeacher();
+  const id = String(formData.get('id'));
+  await prisma.$transaction((tx) => snapshot(tx, id, session.user.name ?? 'Teacher'));
+  revalidatePath(`/invoices/${id}`);
 }

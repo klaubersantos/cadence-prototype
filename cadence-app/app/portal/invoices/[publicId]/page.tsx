@@ -30,7 +30,7 @@ export default async function PortalInvoiceDetailPage({ params }: { params: Prom
 
   const invoice = await prisma.invoice.findUniqueOrThrow({
     where: { id: result.value.id },
-    include: { lines: true, receipts: true },
+    include: { lines: true, receipts: true, snapshots: { orderBy: { seq: 'desc' } } },
   });
   const notes = await notesFor(prisma, 'INVOICE', invoice.id, 'STUDENT');
 
@@ -41,6 +41,11 @@ export default async function PortalInvoiceDetailPage({ params }: { params: Prom
         lede={`Issued ${fmtDate(invoice.issuedAt)} · due ${fmtDate(invoice.dueAt)}`}
         actions={
           <>
+            {invoice.snapshots[0] && (
+              <a className="btn" href={`/api/portal/invoices/${invoice.publicId}/pdf`} target="_blank" rel="noopener noreferrer">
+                Download {invoice.status === 'PAID' ? 'receipt' : 'PDF'}
+              </a>
+            )}
             {invoice.status === 'ISSUED' && (
               <form action={payInvoiceAction}>
                 <input type="hidden" name="id" value={invoice.id} />
@@ -92,6 +97,40 @@ export default async function PortalInvoiceDetailPage({ params }: { params: Prom
       {invoice.receipts[0] && (
         <Card title="Receipt">
           <Uid id={invoice.receipts[0].publicId} />
+        </Card>
+      )}
+
+      {invoice.snapshots.length > 0 && (
+        <Card title="PDF history" tight>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Generated</th>
+                <th className="num">Total</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {invoice.snapshots.map((sn) => (
+                <tr key={sn.id}>
+                  <td className="mono">{sn.seq}</td>
+                  <td className="tiny mono">{fmtStamp(sn.at)}</td>
+                  <td className="num">{money(sn.total)}</td>
+                  <td style={{ textAlign: 'right' }}>
+                    <a
+                      className="btn sm"
+                      href={`/api/portal/invoices/${invoice.publicId}/pdf?seq=${sn.seq}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Download
+                    </a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </Card>
       )}
 

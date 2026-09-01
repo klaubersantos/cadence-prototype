@@ -5,13 +5,13 @@ import { notesFor } from '@/lib/engine/notes';
 import { fmtDate, fmtStamp, money } from '@/lib/format';
 import { Card, InvoiceBadge, PageHead, StateBadge, Uid } from '@/components/ui';
 import { NoteList } from '@/components/NoteList';
-import { alertInvoiceAction } from '../../actions';
+import { alertInvoiceAction, regenerateInvoicePdfAction } from '../../actions';
 
 export default async function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const invoice = await prisma.invoice.findUnique({
     where: { id },
-    include: { student: true, lines: true, payments: true, receipts: true },
+    include: { student: true, lines: true, payments: true, receipts: true, snapshots: { orderBy: { seq: 'desc' } } },
   });
   if (!invoice) notFound();
   const notes = await notesFor(prisma, 'INVOICE', invoice.id, 'TEACHER');
@@ -26,6 +26,11 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
         lede={`${invoice.student.name} · issued ${fmtDate(invoice.issuedAt)} · due ${fmtDate(invoice.dueAt)}`}
         actions={
           <>
+            {invoice.snapshots[0] && (
+              <a className="btn brass" href={`/api/invoices/${invoice.id}/pdf`} target="_blank" rel="noopener noreferrer">
+                Download {invoice.status === 'PAID' ? 'receipt' : 'PDF'}
+              </a>
+            )}
             {invoice.status === 'ISSUED' && (
               <form action={alertInvoiceAction}>
                 <input type="hidden" name="id" value={invoice.id} />
@@ -112,12 +117,55 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
               </div>
             </>
           )}
-          <div className="tiny muted" style={{ marginTop: 12 }}>
-            PDF history
-          </div>
-          <div className="mono">{invoice.snapshotSeq} snapshot(s) generated</div>
         </Card>
       </div>
+
+      <Card
+        title="PDF snapshot history"
+        tight
+        hint="five most recent; numbering never reused"
+        head={
+          <form action={regenerateInvoicePdfAction} style={{ marginLeft: 'auto' }}>
+            <input type="hidden" name="id" value={invoice.id} />
+            <button className="btn sm brass" type="submit">
+              Regenerate PDF
+            </button>
+          </form>
+        }
+      >
+        {invoice.snapshots.length ? (
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Generated</th>
+                <th>By</th>
+                <th className="num">Lines</th>
+                <th className="num">Total</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {invoice.snapshots.map((sn) => (
+                <tr key={sn.id}>
+                  <td className="mono">{sn.seq}</td>
+                  <td className="tiny mono">{fmtStamp(sn.at)}</td>
+                  <td className="tiny">{sn.by}</td>
+                  <td className="num">{Array.isArray(sn.lines) ? sn.lines.length : 0}</td>
+                  <td className="num">{money(sn.total)}</td>
+                  <td style={{ textAlign: 'right' }}>
+                    <a className="btn sm" href={`/api/invoices/${invoice.id}/pdf?seq=${sn.seq}`} target="_blank" rel="noopener noreferrer">
+                      Download
+                    </a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p className="muted tiny">No snapshot yet.</p>
+        )}
+      </Card>
 
       <NoteList
         notes={notes}
