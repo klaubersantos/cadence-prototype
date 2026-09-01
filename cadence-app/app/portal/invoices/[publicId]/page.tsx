@@ -2,7 +2,8 @@ import Link from 'next/link';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { portalFetch } from '@/lib/engine/access';
-import { fmtDate, money } from '@/lib/format';
+import { notesFor } from '@/lib/engine/notes';
+import { fmtDate, fmtStamp, money } from '@/lib/format';
 import { Card, PageHead, StateBadge, Uid } from '@/components/ui';
 import { payInvoiceAction } from '../../actions';
 
@@ -31,6 +32,7 @@ export default async function PortalInvoiceDetailPage({ params }: { params: Prom
     where: { id: result.value.id },
     include: { lines: true, receipts: true },
   });
+  const notes = await notesFor(prisma, 'INVOICE', invoice.id, 'STUDENT');
 
   return (
     <>
@@ -90,6 +92,19 @@ export default async function PortalInvoiceDetailPage({ params }: { params: Prom
       {invoice.receipts[0] && (
         <Card title="Receipt">
           <Uid id={invoice.receipts[0].publicId} />
+        </Card>
+      )}
+
+      {notes.length > 0 && (
+        <Card title="Notes from your teacher">
+          {notes.map((n) => (
+            <div key={n.id} className="note">
+              {n.content}
+              <div className="tiny muted" style={{ marginTop: 4 }}>
+                {fmtStamp(n.createdAt)}
+              </div>
+            </div>
+          ))}
         </Card>
       )}
     </>

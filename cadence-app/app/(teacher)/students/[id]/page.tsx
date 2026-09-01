@@ -3,9 +3,11 @@ import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { balance, entryForLesson } from '@/lib/engine/billing';
 import { reversionBlockReason } from '@/lib/engine/lessons';
+import { notesFor } from '@/lib/engine/notes';
 import { LessonState } from '@/lib/generated/prisma/client';
-import { fmtDate, fmtStamp, money } from '@/lib/format';
+import { fmtStamp, fmtDate, money } from '@/lib/format';
 import { Card, EmptyState, InvoiceBadge, PageHead, StatCard, StateBadge, Uid } from '@/components/ui';
+import { NoteList } from '@/components/NoteList';
 import { revertLessonAction, sendInviteAction, transitionLessonAction } from '../../actions';
 
 const TRANSITIONS: [LessonState, string][] = [
@@ -20,12 +22,13 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
   const student = await prisma.student.findUnique({ where: { id } });
   if (!student) notFound();
 
-  const [b, lessons, invoices, activity, mails] = await Promise.all([
+  const [b, lessons, invoices, activity, mails, notes] = await Promise.all([
     balance(prisma, id),
     prisma.lesson.findMany({ where: { studentId: id }, orderBy: { start: 'desc' }, take: 14 }),
     prisma.invoice.findMany({ where: { studentId: id }, orderBy: { issuedAt: 'desc' } }),
     prisma.activityLog.findMany({ where: { studentId: id }, orderBy: { at: 'desc' }, take: 12 }),
     prisma.notification.findMany({ where: { studentId: id }, orderBy: { sentAt: 'desc' }, take: 8, include: { events: true } }),
+    notesFor(prisma, 'STUDENT', id, 'TEACHER'),
   ]);
 
   const lessonRows = await Promise.all(
@@ -217,6 +220,12 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
           )}
         </Card>
       </div>
+
+      <NoteList
+        notes={notes}
+        addNoteHref={`/notes/new?targetType=STUDENT&targetId=${student.id}&returnTo=/students/${student.id}`}
+        emptyMessage="No notes on this student yet."
+      />
     </>
   );
 }

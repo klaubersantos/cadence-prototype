@@ -1,8 +1,10 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
+import { notesFor } from '@/lib/engine/notes';
 import { fmtDate, fmtStamp, money } from '@/lib/format';
 import { Card, InvoiceBadge, PageHead, StateBadge, Uid } from '@/components/ui';
+import { NoteList } from '@/components/NoteList';
 import { alertInvoiceAction } from '../../actions';
 
 export default async function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -12,6 +14,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
     include: { student: true, lines: true, payments: true, receipts: true },
   });
   if (!invoice) notFound();
+  const notes = await notesFor(prisma, 'INVOICE', invoice.id, 'TEACHER');
 
   const payment = invoice.payments[0];
   const receipt = invoice.receipts[0];
@@ -115,6 +118,12 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
           <div className="mono">{invoice.snapshotSeq} snapshot(s) generated</div>
         </Card>
       </div>
+
+      <NoteList
+        notes={notes}
+        addNoteHref={`/notes/new?targetType=INVOICE&targetId=${invoice.id}&returnTo=/invoices/${invoice.id}`}
+        emptyMessage="No notes on this invoice yet."
+      />
     </>
   );
 }

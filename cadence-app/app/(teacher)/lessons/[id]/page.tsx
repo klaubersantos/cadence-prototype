@@ -3,10 +3,12 @@ import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { entryForLesson } from '@/lib/engine/billing';
 import { reversionBlockReason } from '@/lib/engine/lessons';
+import { notesFor } from '@/lib/engine/notes';
 import { LESSON_STATE_META } from '@/lib/lessonStates';
 import { LessonState } from '@/lib/generated/prisma/client';
 import { fmtStamp, money } from '@/lib/format';
 import { Card, PageHead, StateBadge, Uid } from '@/components/ui';
+import { NoteList } from '@/components/NoteList';
 import { revertLessonAction, transitionLessonAction } from '../../actions';
 
 const TRANSITIONS: [LessonState, string][] = [
@@ -21,9 +23,10 @@ export default async function LessonDetailPage({ params }: { params: Promise<{ i
   const lesson = await prisma.lesson.findUnique({ where: { id }, include: { student: true } });
   if (!lesson) notFound();
 
-  const [entry, blockReason] = await Promise.all([
+  const [entry, blockReason, notes] = await Promise.all([
     entryForLesson(prisma, lesson.id),
     lesson.state !== LessonState.SCHEDULED ? reversionBlockReason(prisma, lesson) : Promise.resolve(null),
+    notesFor(prisma, 'LESSON', lesson.id, 'TEACHER'),
   ]);
 
   const meta = LESSON_STATE_META[lesson.state];
@@ -112,6 +115,12 @@ export default async function LessonDetailPage({ params }: { params: Promise<{ i
           )}
         </Card>
       </div>
+
+      <NoteList
+        notes={notes}
+        addNoteHref={`/notes/new?targetType=LESSON&targetId=${lesson.id}&returnTo=/lessons/${lesson.id}`}
+        emptyMessage="No notes on this lesson yet."
+      />
     </>
   );
 }

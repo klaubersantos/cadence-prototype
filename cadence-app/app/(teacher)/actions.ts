@@ -10,9 +10,10 @@ import { transition, revert } from '@/lib/engine/lessons';
 import { createInvoice } from '@/lib/engine/invoices';
 import { sendInvite } from '@/lib/engine/access';
 import { materializeSeries, reviseSeries } from '@/lib/engine/series';
+import { addNote } from '@/lib/engine/notes';
 import { logActivity } from '@/lib/engine/activity';
 import { notify } from '@/lib/engine/notifications';
-import { BillingMode, BoundaryType, LessonState, NotificationType } from '@/lib/generated/prisma/client';
+import { BillingMode, BoundaryType, LessonState, NotificationType, NoteTargetType, NoteVisibility } from '@/lib/generated/prisma/client';
 
 async function requireTeacher() {
   const session = await auth();
@@ -268,4 +269,37 @@ export async function savePolicyAction(formData: FormData) {
   const studio = await prisma.studio.findFirstOrThrow();
   await prisma.studio.update({ where: { id: studio.id }, data: parsed });
   revalidatePath('/settings');
+}
+
+const noteSchema = z.object({
+  targetType: z.enum(['STUDENT', 'LESSON', 'INVOICE']),
+  targetId: z.string().min(1),
+  content: z.string().min(1),
+  visibility: z.enum(['PRIVATE', 'SHARED']),
+  returnTo: z.string().startsWith('/'),
+});
+
+export async function addNoteAction(formData: FormData) {
+  const session = await requireTeacher();
+  const parsed = noteSchema.parse({
+    targetType: formData.get('targetType'),
+    targetId: formData.get('targetId'),
+    content: formData.get('content'),
+    visibility: formData.get('visibility'),
+    returnTo: formData.get('returnTo'),
+  });
+
+  await prisma.$transaction((tx) =>
+    addNote(
+      tx,
+      parsed.targetType as NoteTargetType,
+      parsed.targetId,
+      parsed.content,
+      parsed.visibility as NoteVisibility,
+      session.user.name ?? 'Teacher',
+    ),
+  );
+
+  revalidatePath(parsed.returnTo);
+  redirect(parsed.returnTo);
 }

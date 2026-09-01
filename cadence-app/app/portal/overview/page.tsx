@@ -1,7 +1,8 @@
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { notesFor } from '@/lib/engine/notes';
 import { LessonState, InvoiceStatus } from '@/lib/generated/prisma/client';
-import { fmtDate, fmtTime, money } from '@/lib/format';
+import { fmtDate, fmtStamp, fmtTime, money } from '@/lib/format';
 import { Card, EmptyState, PageHead, StateBadge, Uid } from '@/components/ui';
 import { payInvoiceAction } from '../actions';
 
@@ -10,13 +11,14 @@ export default async function PortalOverviewPage() {
   const studentId = session!.user.id;
   const now = new Date();
 
-  const [student, next, due] = await Promise.all([
+  const [student, next, due, notes] = await Promise.all([
     prisma.student.findUniqueOrThrow({ where: { id: studentId } }),
     prisma.lesson.findFirst({
       where: { studentId, state: LessonState.SCHEDULED, start: { gte: now } },
       orderBy: { start: 'asc' },
     }),
     prisma.invoice.findMany({ where: { studentId, status: InvoiceStatus.ISSUED }, orderBy: { dueAt: 'asc' } }),
+    notesFor(prisma, 'STUDENT', studentId, 'STUDENT'),
   ]);
 
   return (
@@ -71,6 +73,21 @@ export default async function PortalOverviewPage() {
           )}
         </Card>
       </div>
+
+      {notes.length > 0 && (
+        <Card title="Notes from your teacher">
+          {notes.map((n) => (
+            <div key={n.id} className="note">
+              <Uid id={n.publicId} sm />
+              <br />
+              {n.content}
+              <div className="tiny muted" style={{ marginTop: 4 }}>
+                {fmtStamp(n.createdAt)}
+              </div>
+            </div>
+          ))}
+        </Card>
+      )}
     </>
   );
 }
