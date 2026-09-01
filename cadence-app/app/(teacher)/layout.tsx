@@ -7,7 +7,7 @@ import { NavLink } from '@/components/NavLink';
 import { Shell } from '@/components/Shell';
 
 const NAV: [string, [string, string][]][] = [
-  ['Studio', [['/dashboard', 'Dashboard'], ['/students', 'Students']]],
+  ['Studio', [['/dashboard', 'Dashboard'], ['/calendar', 'Calendar'], ['/students', 'Students']]],
   ['Money', [['/unbilled', 'Unbilled lessons'], ['/invoices', 'Invoices']]],
 ];
 

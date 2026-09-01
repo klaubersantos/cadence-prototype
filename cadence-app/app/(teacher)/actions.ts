@@ -9,9 +9,10 @@ import { nextId } from '@/lib/engine/identifiers';
 import { transition, revert } from '@/lib/engine/lessons';
 import { createInvoice } from '@/lib/engine/invoices';
 import { sendInvite } from '@/lib/engine/access';
+import { materializeSeries, reviseSeries } from '@/lib/engine/series';
 import { logActivity } from '@/lib/engine/activity';
 import { notify } from '@/lib/engine/notifications';
-import { BillingMode, LessonState, NotificationType } from '@/lib/generated/prisma/client';
+import { BillingMode, BoundaryType, LessonState, NotificationType } from '@/lib/generated/prisma/client';
 
 async function requireTeacher() {
   const session = await auth();
@@ -125,4 +126,105 @@ export async function alertInvoiceAction(formData: FormData) {
   });
   revalidatePath('/dashboard');
   revalidatePath(`/invoices/${id}`);
+}
+
+const seriesSchema = z
+  .object({
+    studentId: z.string().min(1),
+    dayOfWeek: z.coerce.number().min(0).max(6),
+    time: z.string().regex(/^\d{2}:\d{2}$/),
+    durationMin: z.coerce.number().min(1),
+    boundaryType: z.enum(['ONGOING', 'END_DATE']),
+    endDate: z.string().optional(),
+  })
+  .refine((v) => v.boundaryType !== 'END_DATE' || !!v.endDate, {
+    message: 'A fixed boundary needs an end date.',
+    path: ['endDate'],
+  });
+
+export async function createSeriesAction(formData: FormData) {
+  const session = await requireTeacher();
+  const parsed = seriesSchema.parse({
+    studentId: formData.get('studentId'),
+    dayOfWeek: formData.get('dayOfWeek'),
+    time: formData.get('time'),
+    durationMin: formData.get('durationMin'),
+    boundaryType: formData.get('boundaryType'),
+    endDate: formData.get('endDate') || undefined,
+  });
+
+  const studio = await prisma.studio.findFirstOrThrow();
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const series = await prisma.$transaction(async (tx) => {
+    const s = await tx.series.create({
+      data: {
+        studentId: parsed.studentId,
+        dayOfWeek: parsed.dayOfWeek,
+        time: parsed.time,
+        durationMin: parsed.durationMin,
+        startDate: today,
+        boundaryType: parsed.boundaryType as BoundaryType,
+        endDate: parsed.endDate ? new Date(`${parsed.endDate}T00:00`) : null,
+      },
+    });
+    await materializeSeries(tx, s, today, studio.defaultLocation);
+    const student = await tx.student.findUniqueOrThrow({ where: { id: parsed.studentId } });
+    await notify(tx, NotificationType.RESCHEDULE, student.email, { studentId: student.id });
+    const occurrenceCount = await tx.lesson.count({ where: { seriesId: s.id } });
+    await logActivity(tx, session.user.name ?? 'Teacher', `Series created — ${occurrenceCount} occurrences materialized.`, {
+      studentId: student.id,
+      kind: 'series',
+    });
+    return s;
+  });
+
+  revalidatePath('/calendar');
+  redirect(`/series/${series.id}`);
+}
+
+const reviseSchema = z.object({
+  id: z.string().min(1),
+  dayOfWeek: z.coerce.number().min(0).max(6).optional(),
+  time: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  durationMin: z.coerce.number().min(1).optional(),
+  boundaryType: z.enum(['ONGOING', 'END_DATE']).optional(),
+  endDate: z.string().optional(),
+});
+
+export async function reviseSeriesAction(formData: FormData) {
+  const session = await requireTeacher();
+  const parsed = reviseSchema.parse({
+    id: formData.get('id'),
+    dayOfWeek: formData.get('dayOfWeek'),
+    time: formData.get('time'),
+    durationMin: formData.get('durationMin'),
+    boundaryType: formData.get('boundaryType'),
+    endDate: formData.get('endDate') || undefined,
+  });
+
+  const studio = await prisma.studio.findFirstOrThrow();
+  const result = await prisma.$transaction((tx) =>
+    reviseSeries(
+      tx,
+      parsed.id,
+      {
+        dayOfWeek: parsed.dayOfWeek,
+        time: parsed.time,
+        durationMin: parsed.durationMin,
+        boundaryType: parsed.boundaryType,
+        endDate: parsed.endDate ? new Date(`${parsed.endDate}T00:00`) : undefined,
+      },
+      session.user.name ?? 'Teacher',
+      studio.defaultLocation,
+    ),
+  );
+
+  revalidatePath('/calendar');
+  revalidatePath(`/series/${parsed.id}`);
+  if (result.ok && 'noop' in result.value) {
+    redirect(`/series/${parsed.id}?notice=noop`);
+  }
+  redirect(`/series/${parsed.id}`);
 }
