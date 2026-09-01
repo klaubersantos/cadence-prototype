@@ -9,6 +9,7 @@ import { Shell } from '@/components/Shell';
 const NAV: [string, [string, string][]][] = [
   ['Studio', [['/dashboard', 'Dashboard'], ['/calendar', 'Calendar'], ['/students', 'Students']]],
   ['Money', [['/unbilled', 'Unbilled lessons'], ['/invoices', 'Invoices']]],
+  ['Records', [['/settings', 'Settings']]],
 ];
 
 export default async function TeacherLayout({ children }: { children: React.ReactNode }) {

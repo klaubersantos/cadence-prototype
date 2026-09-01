@@ -228,3 +228,44 @@ export async function reviseSeriesAction(formData: FormData) {
   }
   redirect(`/series/${parsed.id}`);
 }
+
+const studioProfileSchema = z.object({
+  name: z.string().min(1),
+  teacherName: z.string().min(1),
+  timezone: z.string().min(1),
+  defaultDuration: z.coerce.number().min(1),
+  defaultLocation: z.string().min(1),
+});
+
+export async function saveStudioProfileAction(formData: FormData) {
+  await requireTeacher();
+  const parsed = studioProfileSchema.parse({
+    name: formData.get('name'),
+    teacherName: formData.get('teacherName'),
+    timezone: formData.get('timezone'),
+    defaultDuration: formData.get('defaultDuration'),
+    defaultLocation: formData.get('defaultLocation'),
+  });
+  const studio = await prisma.studio.findFirstOrThrow();
+  await prisma.studio.update({ where: { id: studio.id }, data: parsed });
+  revalidatePath('/settings');
+  revalidatePath('/', 'layout');
+}
+
+const policySchema = z.object({
+  lateCancelWindowHours: z.coerce.number().min(1),
+  lateCancelChargePct: z.coerce.number().min(0).max(100),
+  policyNote: z.string().min(1),
+});
+
+export async function savePolicyAction(formData: FormData) {
+  await requireTeacher();
+  const parsed = policySchema.parse({
+    lateCancelWindowHours: formData.get('lateCancelWindowHours'),
+    lateCancelChargePct: formData.get('lateCancelChargePct'),
+    policyNote: formData.get('policyNote'),
+  });
+  const studio = await prisma.studio.findFirstOrThrow();
+  await prisma.studio.update({ where: { id: studio.id }, data: parsed });
+  revalidatePath('/settings');
+}
