@@ -12,7 +12,7 @@ import { sendInvite } from '@/lib/engine/access';
 import { materializeSeries, reviseSeries } from '@/lib/engine/series';
 import { addNote } from '@/lib/engine/notes';
 import { logActivity } from '@/lib/engine/activity';
-import { notify } from '@/lib/engine/notifications';
+import { notify, resend } from '@/lib/engine/notifications';
 import { BillingMode, BoundaryType, LessonState, NotificationType, NoteTargetType, NoteVisibility } from '@/lib/generated/prisma/client';
 
 async function requireTeacher() {
@@ -309,4 +309,13 @@ export async function regenerateInvoicePdfAction(formData: FormData) {
   const id = String(formData.get('id'));
   await prisma.$transaction((tx) => snapshot(tx, id, session.user.name ?? 'Teacher'));
   revalidatePath(`/invoices/${id}`);
+}
+
+export async function resendNotificationAction(formData: FormData) {
+  await requireTeacher();
+  const id = String(formData.get('id'));
+  const result = await prisma.$transaction((tx) => resend(tx, id));
+  if (!result.ok) throw new Error(result.error);
+  revalidatePath('/emails');
+  redirect(`/notifications/${result.value.id}`);
 }
